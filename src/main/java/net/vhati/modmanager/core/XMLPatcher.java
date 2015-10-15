@@ -38,12 +38,14 @@ public class XMLPatcher {
 
 	protected boolean globalPanic = false;
 	protected Namespace modNS;
+	protected Namespace modNotNS;
 	protected Namespace modAppendNS;
 	protected Namespace modOverwriteNS;
 
 
 	public XMLPatcher() {
 		modNS = Namespace.getNamespace( "mod", "mod" );
+		modNotNS = Namespace.getNamespace( "mod-not", "mod-not" );
 		modAppendNS = Namespace.getNamespace( "mod-append", "mod-append" );
 		modOverwriteNS = Namespace.getNamespace( "mod-overwrite", "mod-overwrite" );
 	}
@@ -95,7 +97,7 @@ public class XMLPatcher {
 	protected List<Element> handleModFind( Element contextNode, Element node ) {
 		List<Element> result = null;
 
-		if ( node.getNamespace().equals( modNS ) ) {
+		if ( node.getNamespace().equals( modNS ) || node.getNamespace().equals( modNotNS ) ) {
 
 			if ( node.getName().equals( "findName" ) ) {
 
@@ -297,7 +299,7 @@ public class XMLPatcher {
 	protected List<Element> handleModPar( Element contextNode, Element node ) {
 		List<Element> result = null;
 
-		if ( node.getNamespace().equals( modNS ) ) {
+		if ( node.getNamespace().equals( modNS ) || node.getNamespace().equals( modNotNS ) ) {
 
 			if ( node.getName().equals( "par" ) ) {
 
@@ -312,7 +314,7 @@ public class XMLPatcher {
 				Set<Element> candidateSet = new HashSet<Element>();
 				for ( Element criteriaNode : node.getChildren() ) {
 					List<Element> candidates;
-					if ( criteriaNode.getName().equals( "par" ) && criteriaNode.getNamespace().equals( modNS ) ) {
+					if ( criteriaNode.getName().equals( "par" ) && ( criteriaNode.getNamespace().equals( modNS ) || criteriaNode.getNamespace().equals( modNotNS ) ) ) {
 						candidates = handleModPar( contextNode, criteriaNode );
 					} else {
 						candidates = handleModFind( contextNode, criteriaNode );
@@ -320,11 +322,31 @@ public class XMLPatcher {
 							throw new IllegalArgumentException( String.format( "Invalid <par> search criteria <%s> (%s). Must be a <find...> or <par>.", criteriaNode.getName(), getPathToRoot(criteriaNode) ) );
 					}
 
-					if ( isOr || candidateSet.isEmpty() ) {
-						candidateSet.addAll( candidates );
+					if ( candidateSet.isEmpty() ) {
+						if ( criteriaNode.getNamespace().equals( modNS ) ) {
+							candidateSet.addAll( candidates );
+						}
+						else if ( criteriaNode.getNamespace().equals( modNotNS ) ) {
+							throw new IllegalArgumentException( String.format( "Invalid <par> search criteria <%s> (%s). A mod-not tag must not be the first criterion.",
+									criteriaNode.getName(), getPathToRoot(criteriaNode) ) );
+						}
+					}
+					else if ( isOr ) {
+						if ( criteriaNode.getNamespace().equals( modNS ) ) {
+							candidateSet.addAll( candidates );
+						}
+						else if ( criteriaNode.getNamespace().equals( modNotNS ) ) {
+							throw new IllegalArgumentException( String.format( "Invalid <par> search criteria <%s> (%s). Using mod-not within op=\"OR\" is not allowed.",
+									criteriaNode.getName(), getPathToRoot(criteriaNode) ) );
+						}
 					}
 					else if ( isAnd ) {
-						candidateSet.retainAll( candidates );
+						if ( criteriaNode.getNamespace().equals( modNS ) ) {
+							candidateSet.retainAll( candidates );
+						}
+						else if ( criteriaNode.getNamespace().equals( modNotNS ) ) {
+							candidateSet.removeAll( candidates );
+						}
 					}
 				}
 				Map<Integer,Element> orderedCandidateMap = new TreeMap<Integer,Element>();
